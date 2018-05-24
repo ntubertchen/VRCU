@@ -34,8 +34,7 @@ def valid(args):
             batch_size=BATCH_SIZE,
             shuffle=True
             )
-        # feature_map = valid_feature['train'][:]
-        feature_map = np.random.rand(4000,50,4032)
+        feature_map = valid_feature['train'][:]
         for step, (x_index,_) in enumerate(loader):
             x_index = x_index.numpy()
             q = Variable(torch.from_numpy(valid_q[x_index])).cuda()
