@@ -92,12 +92,12 @@ def train(args):
                 q = Variable(torch.from_numpy(train_q[x_index])).cuda()
                 a = np.argmax(train_a[x_index],axis=-1)
                 a = Variable(torch.from_numpy(a)).cuda()
-                target = Variable(torch.from_numpy(train_target[x_index])).cuda()
+                target = Variable(torch.from_numpy(train_target[x_index]).float()).cuda()
                 temp = []
                 offset = i*1500
                 for idx in x_index:
                     temp.append(train_featuremapping[train_image_name[idx]]-offset)
-                feature = Variable(torch.from_numpy(feature_map[temp])).cuda()
+                feature = Variable(torch.from_numpy(feature_map[temp]).float()).cuda()
 
                 output = model(q,feature,target)
                 loss = loss_function(output, a)
