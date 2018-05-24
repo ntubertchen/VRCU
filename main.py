@@ -24,8 +24,8 @@ def valid(args):
     loss_function = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    BATCH_SIZE = 4
-    print ('valid len',len(valid_feature['train']))
+    BATCH_SIZE = 15
+    print ('valid len',len(valid_q))
     for epoch in range(args.epochs):
         loss_record = []
         r = torch.from_numpy(np.array([i for i in range(len(valid_feature['train']))]))
@@ -48,12 +48,53 @@ def valid(args):
 
             output = model(q,feature,target)
             loss = loss_function(output, a)
-            print (loss)
+            # print (loss)
             loss_record.append(loss.data[0])
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            if step % 100 == 0 and step > 0:
+                print (step,sum(loss_record)/len(loss_record))
+        test(model,valid_q,feature_map,valid_target,valid_a,valid_featuremapping,valid_image_name)
+
+def test(model,q,f,t,a,valid_featuremapping,valid_image_name):
+    batch_size = 5
+    predict = []
+    for i in range(int(len(q)/batch_size)):
+        question = np.array(q[i*batch_size:(i+1)*batch_size])
+        temp = []
+        for j in range(i*batch_size,(i+1)*batch_size):
+            temp.append(valid_featuremapping[valid_image_name[j]])
+        feature = Variable(torch.from_numpy(f[temp]).float()).cuda()
+        target = np.array(t[i*batch_size:(i+1)*batch_size])
+        # print (q,question)
+        output = model(Variable(torch.from_numpy(question)).cuda(),feature,
+            Variable(torch.from_numpy(target).float()).cuda())
+        output = output.data.cpu().numpy()
+        if len(predict) == 0:
+            predict = output
+        else:
+            predict = np.concatenate((np.array(predict),output),0)
+    # print ((len(f)/batch_size)*batch_size)
+    question = np.array(q[int(len(q)/batch_size)*batch_size:])
+    temp = []
+    for j in range(int(len(q)/batch_size)*batch_size,len(q)):
+        temp.append(valid_featuremapping[valid_image_name[j]])
+    feature = Variable(torch.from_numpy(f[temp]).float()).cuda()
+    # feature = f[i*batch_size,:]
+    target = np.array(t[int(len(q)/batch_size)*batch_size:])
+    output = model(Variable(torch.from_numpy(question)).cuda(),feature,
+            Variable(torch.from_numpy(target).float()).cuda())
+    output = output.data.cpu().numpy()
+    predict = np.concatenate((predict,output),0)
+    predict = np.argmax(predict,-1)
+    answer = np.argmax(a,-1)
+    correct = 0
+    for i in range(len(predict)):
+        if predict[i] == answer[i]:
+            correct += 1
+    print ('testing acc',float(correct)/float(len(predict)))
 
 def train(args):
     torch.manual_seed(1000)
