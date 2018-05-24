@@ -25,10 +25,10 @@ def valid(args):
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     BATCH_SIZE = 4
+    print ('valid len',len(valid_feature['train']))
     for epoch in range(args.epochs):
         loss_record = []
-        # r = torch.from_numpy(np.array([i for i in range(len(valid_feature['train']))]))
-        r = torch.from_numpy(np.array([i for i in range(100)]))
+        r = torch.from_numpy(np.array([i for i in range(len(valid_feature['train']))]))
         torch_dataset = Data.TensorDataset(data_tensor=r,target_tensor=r)
         loader = Data.DataLoader(dataset=torch_dataset,
             batch_size=BATCH_SIZE,
@@ -79,9 +79,9 @@ def train(args):
         loss_record = []
         for i in range((113221/1500)+1):
             if i == 113221/1500:
-                r = [j for j in range(i*1500,113221)]
+                r = torch.from_numpy(np.array([j for j in range(i*1500,113221)]))
             else:
-                r = [j for j in range(i*1500,(i+1)*1500)]
+                r = torch.from_numpy(np.array([j for j in range(i*1500,(i+1)*1500)]))
             torch_dataset = Data.TensorDataset(data_tensor=r,target_tensor=r)
             loader = Data.DataLoader(dataset=torch_dataset,
                 batch_size=BATCH_SIZE,
