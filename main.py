@@ -19,37 +19,33 @@ def valid(args):
     valid_feature = h5py.File('/tmp2/val_nas_h5/valid.hdf5')
     #train 113221
 
-    model = Model(vocab_size=len(word_embedding),
-        emb_dim=300,
-        feature_dim=4036,
-        hidden_dim=500,
-        out_dim=3,
-        pretrained_embedding=word_embedding,
-        ).cuda()
+    model = Model(vocab_size=len(word_embedding),emb_dim=300,feature_dim=4032,hidden_dim=500,out_dim=3,pretrained_embedding=word_embedding,).cuda()
 
     loss_function = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    BATCH_SIZE = 3
+    BATCH_SIZE = 4
     for epoch in range(args.epochs):
         loss_record = []
-        r = torch.from_numpy(np.array([i for i in range(len(valid_feature['train']))]))
+        # r = torch.from_numpy(np.array([i for i in range(len(valid_feature['train']))]))
+        r = torch.from_numpy(np.array([i for i in range(100)]))
         torch_dataset = Data.TensorDataset(data_tensor=r,target_tensor=r)
         loader = Data.DataLoader(dataset=torch_dataset,
             batch_size=BATCH_SIZE,
             shuffle=True
             )
-        feature_map = valid_feature[str(i)][:]
+        # feature_map = valid_feature['train'][:]
+        feature_map = np.random.rand(4000,50,4032)
         for step, (x_index,_) in enumerate(loader):
             x_index = x_index.numpy()
             q = Variable(torch.from_numpy(valid_q[x_index])).cuda()
             a = np.argmax(valid_a[x_index],axis=-1)
             a = Variable(torch.from_numpy(a)).cuda()
-            target = Variable(torch.from_numpy(valid_target[x_index])).cuda()
+            target = Variable(torch.from_numpy(valid_target[x_index]).float()).cuda()
             temp = []
             for idx in x_index:
                 temp.append(valid_featuremapping[valid_image_name[idx]])
-            feature = Variable(torch.from_numpy(feature_map[temp])).cuda()
+            feature = Variable(torch.from_numpy(feature_map[temp]).float()).cuda()
 
             output = model(q,feature,target)
             loss = loss_function(output, a)
