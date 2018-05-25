@@ -100,12 +100,24 @@ def test(model,q,f,t,a,valid_featuremapping,valid_image_name):
             correct += 1
     print ('testing acc',float(correct)/float(len(predict)))
 
+def load_train_data():
+    train_feature = h5py.File('/tmp2/train_nas_h5/train.hdf5')
+    feature_index = [str(i) for i in range(1,77)]
+    feature = []
+    for i in range(feature_index):
+        if i == '1':
+            feature = train_feature[i][:]
+        else:
+            feature = np.concatenate((feature,train_feature[i][:]),axis=0) # (1500_ith, 50, 4036)
+    return feature
+
 def train(args):
     torch.manual_seed(1000)
 
     train_featuremapping, train_image_name, train_q, train_a, train_target, train_arxiv, word_embedding = utils.load_data('/home/alas79923/vqa/faster-rcnn.pytorch/guesswhat.train.new.jsonl')
     #valid_featuremapping, valid_q, valid_a, valid_target, valid_arxiv, _ = utils.load_data('/home/alas79923/vqa/faster-rcnn.pytorch/guesswhat.valid.new.jsonl')
-    train_feature = h5py.File('/tmp2/train_nas_h5/train.hdf5')
+    # train_feature = h5py.File('/tmp2/train_nas_h5/train.hdf5')
+    train_feature = load_train_data()
     #train 113221
 
     model = Model(vocab_size=len(word_embedding),
@@ -122,36 +134,35 @@ def train(args):
     BATCH_SIZE = 15
     for epoch in range(args.epochs):
         loss_record = []
-        for i in range((113221/1500)+1):
-            if i == 113221/1500:
-                r = torch.from_numpy(np.array([j for j in range(i*1500,113221)]))
-            else:
-                r = torch.from_numpy(np.array([j for j in range(i*1500,(i+1)*1500)]))
-            torch_dataset = Data.TensorDataset(data_tensor=r,target_tensor=r)
-            loader = Data.DataLoader(dataset=torch_dataset,
-                batch_size=BATCH_SIZE,
-                shuffle=True
-                )
-            feature_map = train_feature[str(i)][:]
-            for step, (x_index,_) in enumerate(loader):
-                q = Variable(torch.from_numpy(train_q[x_index])).cuda()
-                a = np.argmax(train_a[x_index],axis=-1)
-                a = Variable(torch.from_numpy(a)).cuda()
-                target = Variable(torch.from_numpy(train_target[x_index]).float()).cuda()
-                temp = []
-                offset = i*1500
-                for idx in x_index:
-                    temp.append(train_featuremapping[train_image_name[idx]]-offset)
-                feature = Variable(torch.from_numpy(feature_map[temp]).float()).cuda()
+        
+        r = torch.from_numpy(np.array([j for j in range(len(train_q))]))
+        torch_dataset = Data.TensorDataset(data_tensor=r,target_tensor=r)
+        loader = Data.DataLoader(dataset=torch_dataset,
+            batch_size=BATCH_SIZE,
+            shuffle=True
+            )
 
-                output = model(q,feature,target)
-                loss = loss_function(output, a)
-                print (loss)
-                loss_record.append(loss.data[0])
+        for step, (x_index,_) in enumerate(loader):
+            q = Variable(torch.from_numpy(train_q[x_index])).cuda()
+            a = np.argmax(train_a[x_index],axis=-1)
+            a = Variable(torch.from_numpy(a)).cuda()
+            target = Variable(torch.from_numpy(train_target[x_index]).float()).cuda()
+            temp = []
+            for idx in x_index:
+                temp.append(train_featuremapping[train_image_name[idx]])
+            feature = Variable(torch.from_numpy(train_feature[temp]).float()).cuda()
 
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+            output = model(q,feature,target)
+            loss = loss_function(output, a)
+            loss_record.append(loss.data[0])
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            if step % 500 == 0 and step > 0:
+                print (step,sum(loss_record)/len(loss_record))
+                loss_record = []
+            
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
