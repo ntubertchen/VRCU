@@ -19,22 +19,22 @@ def valid(args):
     valid_feature = h5py.File('/tmp2/val_nas_h5/valid.hdf5')
     #train 113221
 
-    model = Model(vocab_size=len(word_embedding),emb_dim=300,feature_dim=4032,hidden_dim=500,out_dim=3,pretrained_embedding=word_embedding,).cuda()
+    model = Model(vocab_size=len(word_embedding),emb_dim=300,feature_dim=4032,hidden_dim=500,out_dim=2,pretrained_embedding=word_embedding,).cuda()
 
     loss_function = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    BATCH_SIZE = 15
+    BATCH_SIZE = 32
     print ('valid len',len(valid_q))
+    r = torch.from_numpy(np.array([i for i in range(len(valid_q))]))
+    torch_dataset = Data.TensorDataset(data_tensor=r,target_tensor=r)
+    loader = Data.DataLoader(dataset=torch_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True
+        )
+    feature_map = valid_feature['train'][:]
     for epoch in range(args.epochs):
         loss_record = []
-        r = torch.from_numpy(np.array([i for i in range(len(valid_feature['train']))]))
-        torch_dataset = Data.TensorDataset(data_tensor=r,target_tensor=r)
-        loader = Data.DataLoader(dataset=torch_dataset,
-            batch_size=BATCH_SIZE,
-            shuffle=True
-            )
-        feature_map = valid_feature['train'][:]
         for step, (x_index,_) in enumerate(loader):
             x_index = x_index.numpy()
             q = Variable(torch.from_numpy(valid_q[x_index])).cuda()
@@ -54,9 +54,13 @@ def valid(args):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            if step % 100 == 0 and step > 0:
+            if step % 500 == 0 and step > 0:
                 print (step,sum(loss_record)/len(loss_record))
-        test(model,valid_q,feature_map,valid_target,valid_a,valid_featuremapping,valid_image_name)
+                loss_record = []
+        
+        print ('finish one epoch:',epoch)
+        if epoch % 3 == 0 and epoch >0:
+            test(model,valid_q,feature_map,valid_target,valid_a,valid_featuremapping,valid_image_name)
 
 def test(model,q,f,t,a,valid_featuremapping,valid_image_name):
     batch_size = 5
@@ -152,7 +156,7 @@ def train(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--lr', metavar='', type=float, default=1e-4, help='initial learning rate')
-    parser.add_argument('--epochs', metavar='', type=int, default=10, help='number of epochs.')
+    parser.add_argument('--epochs', metavar='', type=int, default=30, help='number of epochs.')
     args, unparsed = parser.parse_known_args()
     valid(args)
 

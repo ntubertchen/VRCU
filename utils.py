@@ -96,13 +96,13 @@ def trainsform_word_to_index(question,pretrained_embedding,vocabulary):
 def transform_ans_to_onehot(answer):
     ans = []
     for a in answer:
-        temp = [0] * 3
+        temp = [0] * 2
         if a == 'Yes':
             temp[0] = 1
         elif a == 'No':
             temp[1] = 1
         elif a == 'N/A':
-            temp[2] = 1
+            temp[0] = 1
         else:
             print ('weird answer',a)
         ans.append(temp)
