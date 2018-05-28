@@ -54,24 +54,26 @@ def load_data(path):
     image_to_float = []
     question = []
     answer = []
-    name_to_featurenumber = {}
     target_object_list = []
     arxiv = {}
     count = 0
+    feature_map_index_to_question = []
+    mapping_index = 0
     for line in file_list:
         data_info = json.loads(line)
         image_name = data_info['image']['file_name']
-        name_to_featurenumber[image_name] = count
-        count += 1
         qa_list = data_info['qas'] #dict answer question
         target_object = data_info['object_id']
         object_list = data_info['objects']
         target_object_np = one_hot_object(target_object,object_list)
         for qa_pair in qa_list:
-            image_to_float.append(image_name)
+            mapping_index += 1
+            image_to_float.append(count)
             question.append(clean_str(qa_pair['question']).split(' '))
             answer.append(qa_pair['answer'])
             target_object_list.append(target_object_np)
+        count += 1
+        feature_map_index_to_question.append(mapping_index)
         arxiv[image_name] = {'qa_list':qa_list,'target_object':target_object,'object_list':object_list}
     answer = transform_ans_to_onehot(answer)
     print ('answer transform done')
@@ -80,7 +82,7 @@ def load_data(path):
     question = trainsform_word_to_index(question,pretrained_embedding,vocabulary)
     embedding_weights = word2vec_to_index2vec(pretrained_embedding, vocabulary_inv)
 
-    return name_to_featurenumber, image_to_float, np.array(question), np.array(answer), np.array(target_object_list), arxiv, embedding_weights
+    return feature_map_index_to_question, image_to_float, np.array(question), np.array(answer), np.array(target_object_list), arxiv, embedding_weights
 
 def trainsform_word_to_index(question,pretrained_embedding,vocabulary):
     question_index = []
