@@ -8,11 +8,14 @@ import tarfile
 import tensorflow as tf
 import zipfile
 import json
-
+import h5py
+import logging
+logging.basicConfig(filename = 'app.log', level = logging.INFO)
 from collections import defaultdict
 from io import StringIO
 from matplotlib import pyplot as plt
 from PIL import Image
+
 import sys
 sys.path.append('/home/alas79923/models/research/object_detection')
 from utils import label_map_util
@@ -29,7 +32,7 @@ config.gpu_options.allow_growth = True
 def load_train_image():
   train_path = '/tmp2/train2014/'
   valid_path = '/tmp2/val2014/'
-  f = open('/home/alas79923/vqa/faster-rcnn.pytorch/guesswhat.train.new.jsonl','r')
+  f = open('/home/alas79923/vqa/faster-rcnn.pytorch/guesswhat.test.jsonl','r')
   l = []
   l2 = []
   for line in f:
@@ -42,11 +45,12 @@ def load_train_image():
       l.append(valid_path+file_name)
     else:
       print ('file name error', file_name)
-
   return l,l2
 
 
 def load_image_into_numpy_array(image):
+  if image.mode != 'RGB':
+    image = image.convert('RGB')
   (im_width, im_height) = image.size
   return np.array(image.getdata()).reshape(
       (im_height, im_width, 3)).astype(np.uint8)
@@ -59,30 +63,67 @@ with detection_graph.as_default():
     od_graph_def.ParseFromString(serialized_graph)
     tf.import_graph_def(od_graph_def, name='')
 
-# with detection_graph.as_default():
-#   with tf.Session(graph=detection_graph,config=config) as sess:
-#     oplist = sess.graph.get_operations()
-#     for op in oplist:
-#       if 'AvgPool' in op.name:
-#         print (op.values())
-
-# AvgPool = detection_graph.get_tensor_by_name('SecondStageBoxPredictor/AvgPool:0')
+output = h5py.File('/tmp2/test_nas_h5/test_concise.hdf5','w')
+feature_list = []
 image_paths,image_names = load_train_image()
+image_to_idx = {}
+idx_to_image = {}
+image_to_idx_file = open('/tmp2/test_nas_h5/image_to_idx.json','w')
+idx_to_image_file = open('/tmp2/test_nas_h5/idx_to_image.json','w')
+
+
+index = 0
+for image_path in image_paths:
+  if image_path not in image_to_idx:
+    image_to_idx[image_path] = index
+    idx_to_image[index] = image_path
+    index += 1
+print ('total image number:',len(image_to_idx))
+json.dump(image_to_idx,image_to_idx_file)
+json.dump(idx_to_image,idx_to_image_file)
+batch_size = 18
+IMAGE_SIZE = (300, 300)
 with detection_graph.as_default():
   with tf.Session(graph=detection_graph,config=config) as sess:
     image_tensor = detection_graph.get_tensor_by_name('image_tensor:0')
-    detection_scores = detection_graph.get_tensor_by_name('detection_scores:0')
-    detection_classes = detection_graph.get_tensor_by_name('detection_classes:0')
-    num_detections = detection_graph.get_tensor_by_name('num_detections:0')
+    # detection_scores = detection_graph.get_tensor_by_name('detection_scores:0')
+    # detection_classes = detection_graph.get_tensor_by_name('detection_classes:0')
+    # num_detections = detection_graph.get_tensor_by_name('num_detections:0')
     AvgPool = detection_graph.get_tensor_by_name('SecondStageBoxPredictor/AvgPool:0')
-    for i in range(len(image_paths)):
-      image_path = image_paths[i]
-      print (image_path)
-      image = Image.open(image_path)
-      image_np = load_image_into_numpy_array(image)
-      image_np_expanded = np.expand_dims(image_np, axis=0)
-      a = sess.run([AvgPool],feed_dict={image_tensor: image_np_expanded})
-      feature = np.squeeze(np.array(a[0]))
-      np.savetxt('/tmp2/train_nas_feature/'+image_names[i]+'.out',feature)
+    # print (len(image_paths))
+    one_batch_image = []
+    count = 0
+    try:
+      for i in range(len(idx_to_image)):
+        count += 1
+        image_path = idx_to_image[i]
+        image = Image.open(image_path).resize(IMAGE_SIZE)
+        image_np = load_image_into_numpy_array(image)
+        one_batch_image.append(image_np)
+        if i > 0 and (i+1) % batch_size == 0:
+          a = sess.run(AvgPool,feed_dict={image_tensor: np.array(one_batch_image)})
+          feature = np.squeeze(np.array(a))
+          feature = feature.reshape(-1,50,4032)
+          if i == batch_size:
+            feature_list = [feature]
+          else:
+            print (i)
+            feature_list.append(feature)
+            # feature_list = np.concatenate((feature_list,feature),axis=0)
+          one_batch_image = []
+        # if i % 1024 == 0 and i > 0:
+        #  output.create_dataset(str(count/1024), data=feature_list)
+        #  feature_list = []
+      feature_list = np.array(feature_list).reshape(-1,50,4032)
+      output.create_dataset('0',data=feature_list)
+    except IOError as e:
+      logging.exception(str(e))
+    if len(idx_to_image) % batch_size != 0:
+      a = sess.run(AvgPool,feed_dict={image_tensor: np.array(one_batch_image)})
+      feature = np.squeeze(np.array(a)).reshape(-1,50,4032)
+      output.create_dataset('1', data=feature)
+      # np.savetxt('/tmp2/train_nas_feature/'+image_names[i]+'.out',feature)
     # /tmp2/train2014/COCO_train2014_000000291822.jpg
     # /home/alas79923/vqa/faster-rcnn.pytorch/
+
+output.close()
