@@ -75,6 +75,12 @@ class Model(nn.Module):
 
         return prediction
 
+    def GLU(self,x,W,W_prime):
+        y_tilde = W(x)
+        g = F.sigmoid(W_prime(x))
+        y = torch.mul(y_tilde, g)
+        return y
+
     def _gated_tanh(self, x, W, W_prime):
         y_tilde = F.tanh(W(x))
         g = F.sigmoid(W_prime(x))

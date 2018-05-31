@@ -46,43 +46,50 @@ def one_hot_object(target_object_id,object_list):
     assert no_object == False
     return obj_np
 
-def load_data(path):
+def load_data(file_name,jsonfile):
     # utils.load_data('/home/alas79923/vqa/faster-rcnn.pytorch/guesswhat.valid.new.jsonl')
     #'/home/alas79923/vqa/faster-rcnn.pytorch/guesswhat.train.new.jsonl'
     vocabulary, vocabulary_inv = build_vocab()
-    file_list = open(path,'r')
-    image_to_float = []
+    f = open(jsonfile,'r')
+    for l in f:
+        image_to_index = json.loads(l)
+    print ('image len',len(image_to_index))
+    f.close()
+    file_list = open(file_name,'r')
     question = []
     answer = []
     target_object_list = []
     arxiv = {}
+    feature_map_index_list = []
     count = 0
-    feature_map_index_to_question = []
-    mapping_index = 0
     for line in file_list:
+        count += 1
         data_info = json.loads(line)
         image_name = data_info['image']['file_name']
+        if 'train' in image_name:
+            feature_map_index = image_to_index['/tmp2/train2014/'+image_name]
+        elif 'val' in image_name:
+            feature_map_index = image_to_index['/tmp2/val2014/'+image_name]
+        else:
+            print ('image_name error',image_name)
         qa_list = data_info['qas'] #dict answer question
         target_object = data_info['object_id']
         object_list = data_info['objects']
         target_object_np = one_hot_object(target_object,object_list)
         for qa_pair in qa_list:
-            mapping_index += 1
-            image_to_float.append(count)
             question.append(clean_str(qa_pair['question']).split(' '))
             answer.append(qa_pair['answer'])
             target_object_list.append(target_object_np)
-        count += 1
-        feature_map_index_to_question.append(mapping_index)
+            feature_map_index_list.append(feature_map_index)
         arxiv[image_name] = {'qa_list':qa_list,'target_object':target_object,'object_list':object_list}
     answer = transform_ans_to_onehot(answer)
-    print ('answer transform done')
+    print ('answer transform done, question set:',count)
     pretrained_embedding = load_word_embedding()
 
     question = trainsform_word_to_index(question,pretrained_embedding,vocabulary)
     embedding_weights = word2vec_to_index2vec(pretrained_embedding, vocabulary_inv)
 
-    return feature_map_index_to_question, image_to_float, np.array(question), np.array(answer), np.array(target_object_list), arxiv, embedding_weights
+    return feature_map_index_list, np.array(question), np.array(answer), np.array(target_object_list), arxiv, embedding_weights
 
 def trainsform_word_to_index(question,pretrained_embedding,vocabulary):
     question_index = []
@@ -98,13 +105,13 @@ def trainsform_word_to_index(question,pretrained_embedding,vocabulary):
 def transform_ans_to_onehot(answer):
     ans = []
     for a in answer:
-        temp = [0] * 2
+        temp = [0] * 3
         if a == 'Yes':
             temp[0] = 1
         elif a == 'No':
             temp[1] = 1
         elif a == 'N/A':
-            temp[0] = 1
+            temp[2] = 1
         else:
             print ('weird answer',a)
         ans.append(temp)
@@ -141,7 +148,7 @@ def build_vocab():
     Builds a vocabulary mapping from word to index based on the sentences.
     Returns vocabulary mapping and inverse vocabulary mapping.
     """
-    file_list = open('/home/alas79923/vqa/faster-rcnn.pytorch/guesswhat.valid.new.jsonl','r')
+    file_list = open('/tmp2/val_nas_h5/guesswhat.valid.new.jsonl','r')
     question = []
     for line in file_list:
         data_info = json.loads(line)
@@ -149,7 +156,14 @@ def build_vocab():
         for qa_pair in qa_list:
             question.append(clean_str(qa_pair['question']).split(' '))
     file_list.close()
-    file_list = open('/home/alas79923/vqa/faster-rcnn.pytorch/guesswhat.train.new.jsonl','r')
+    file_list = open('/tmp2/test_nas_h5/guesswhat.test.jsonl','r')
+    for line in file_list:
+        data_info = json.loads(line)
+        qa_list = data_info['qas'] #dict answer question
+        for qa_pair in qa_list:
+            question.append(clean_str(qa_pair['question']).split(' '))
+    file_list.close()
+    file_list = open('/tmp2/train_nas_h5/guesswhat.train.new.jsonl','r')
     for line in file_list:
         data_info = json.loads(line)
         qa_list = data_info['qas'] #dict answer question

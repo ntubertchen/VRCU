@@ -32,7 +32,7 @@ config.gpu_options.allow_growth = True
 def load_train_image():
   train_path = '/tmp2/train2014/'
   valid_path = '/tmp2/val2014/'
-  f = open('/home/alas79923/vqa/faster-rcnn.pytorch/guesswhat.test.jsonl','r')
+  f = open('/tmp2/train_nas_h5/guesswhat.train.new.jsonl','r')
   l = []
   l2 = []
   for line in f:
@@ -63,13 +63,13 @@ with detection_graph.as_default():
     od_graph_def.ParseFromString(serialized_graph)
     tf.import_graph_def(od_graph_def, name='')
 
-output = h5py.File('/tmp2/test_nas_h5/test_concise.hdf5','w')
+output = h5py.File('/tmp2/train_nas_h5/train_concise.hdf5','w')
 feature_list = []
 image_paths,image_names = load_train_image()
 image_to_idx = {}
 idx_to_image = {}
-image_to_idx_file = open('/tmp2/test_nas_h5/image_to_idx.json','w')
-idx_to_image_file = open('/tmp2/test_nas_h5/idx_to_image.json','w')
+image_to_idx_file = open('/tmp2/train_nas_h5/image_to_idx.json','w')
+idx_to_image_file = open('/tmp2/train_nas_h5/idx_to_image.json','w')
 
 
 index = 0
