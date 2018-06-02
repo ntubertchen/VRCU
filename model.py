@@ -82,6 +82,7 @@ class Model(nn.Module):
         return y
 
     def _gated_tanh(self, x, W, W_prime):
+        #x = F.dropout(x, p=0.5, training=self.training)
         y_tilde = F.tanh(W(x))
         g = F.sigmoid(W_prime(x))
         y = torch.mul(y_tilde, g)
