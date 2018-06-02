@@ -29,9 +29,11 @@ def clean_str(string):
     string = re.sub(r"\s{2,}", " ", string)
     return string.strip().lower()
 
-def one_hot_object(target_object_id,object_list):
+def one_hot_object(target_object_id,object_list,image):
     no_object = True
     obj_np = np.zeros(94)
+    i_w = image['width']
+    i_h = image['height']
     for obj in object_list:
         if obj['id'] == target_object_id:
             obj['category_id'] -= 1
@@ -39,10 +41,10 @@ def one_hot_object(target_object_id,object_list):
             assert obj['category_id'] < 90
             assert obj['category_id'] >= 0
             obj_np[obj['category_id']] = 1
-            obj_np[80] = obj['bbox'][0]#x
-            obj_np[81] = obj['bbox'][1]#y
-            obj_np[82] = obj['bbox'][2]#w
-            obj_np[83] = obj['bbox'][3]#h
+            obj_np[90] = obj['bbox'][0]/float(i_w)#x
+            obj_np[91] = obj['bbox'][1]/float(i_h)#y
+            obj_np[92] = obj['bbox'][2]/float(i_w)#w
+            obj_np[93] = obj['bbox'][3]/float(i_h)#h
     assert no_object == False
     return obj_np
 
@@ -75,7 +77,7 @@ def load_data(file_name,jsonfile):
         qa_list = data_info['qas'] #dict answer question
         target_object = data_info['object_id']
         object_list = data_info['objects']
-        target_object_np = one_hot_object(target_object,object_list)
+        target_object_np = one_hot_object(target_object,object_list,data_info['image'])
         for qa_pair in qa_list:
             question.append(clean_str(qa_pair['question']).split(' '))
             answer.append(qa_pair['answer'])
