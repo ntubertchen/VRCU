@@ -48,6 +48,79 @@ def one_hot_object(target_object_id,object_list,image):
     assert no_object == False
     return obj_np
 
+def ground_truth_feature(target_object_id,object_list,image):
+    no_object = True
+    gt = np.zeros((20,94))
+    target_object_np = np.zeros(94)
+    i_w = image['width']
+    i_h = image['height']
+    count = 0
+    for obj in object_list:
+        obj['category_id'] -= 1
+        no_object = False
+        assert obj['category_id'] < 90
+        assert obj['category_id'] >= 0
+        gt[count][obj['category_id']] = 1
+        gt[count][90] = obj['bbox'][0]/float(i_w)#x
+        gt[count][91] = obj['bbox'][1]/float(i_h)#y
+        gt[count][92] = obj['bbox'][2]/float(i_w)#w
+        gt[count][93] = obj['bbox'][3]/float(i_h)#h        
+        if obj['id'] == target_object_id:
+            target_object_np[obj['category_id']] = 1
+            target_object_np[90] = obj['bbox'][0]/float(i_w)#x
+            target_object_np[91] = obj['bbox'][1]/float(i_h)#y
+            target_object_np[92] = obj['bbox'][2]/float(i_w)#w
+            target_object_np[93] = obj['bbox'][3]/float(i_h)#h
+        count += 1
+    assert no_object == False
+    return target_object_np, gt, count
+
+def experiment_load_data(file_name,jsonfile):
+    vocabulary, vocabulary_inv = build_vocab()
+    f = open(jsonfile,'r')
+    for l in f:
+        image_to_index = json.loads(l)
+    print ('image len',len(image_to_index))
+    f.close()
+    file_list = open(file_name,'r')
+    question = []
+    answer = []
+    target_object_list = []
+    arxiv = {}
+    feature_map_index_list = []
+    count = 0
+    obj_in_one_image_list = []
+    ground_truth_feature_list = []
+    for line in file_list:
+        count += 1
+        data_info = json.loads(line)
+        image_name = data_info['image']['file_name']
+        if 'train' in image_name:
+            feature_map_index = image_to_index['/tmp2/train2014/'+image_name]
+        elif 'val' in image_name:
+            feature_map_index = image_to_index['/tmp2/val2014/'+image_name]
+        else:
+            print ('image_name error',image_name)
+        qa_list = data_info['qas'] #dict answer question
+        target_object = data_info['object_id']
+        object_list = data_info['objects']
+        target_object_np, gt_feature,obj_in_one_image = ground_truth_feature(target_object,object_list,data_info['image']) #target gt count
+        obj_in_one_image_list.append(obj_in_one_image)
+        for qa_pair in qa_list:
+            question.append(clean_str(qa_pair['question']).split(' '))
+            answer.append(qa_pair['answer'])
+            target_object_list.append(target_object_np)
+            ground_truth_feature_list.append(gt_feature)
+        arxiv[image_name] = {'qa_list':qa_list,'target_object':target_object,'object_list':object_list}
+    answer = transform_ans_to_onehot(answer)
+    print ('answer transform done, question set:',count)
+    pretrained_embedding = load_word_embedding()
+
+    question = trainsform_word_to_index(question,pretrained_embedding,vocabulary)
+    embedding_weights = word2vec_to_index2vec(pretrained_embedding, vocabulary_inv)
+
+    return np.array(ground_truth_feature_list), np.array(question), np.array(answer), np.array(target_object_list), arxiv, embedding_weights, obj_in_one_image_list
+
 def load_data(file_name,jsonfile):
     # utils.load_data('/home/alas79923/vqa/faster-rcnn.pytorch/guesswhat.valid.new.jsonl')
     #'/home/alas79923/vqa/faster-rcnn.pytorch/guesswhat.train.new.jsonl'

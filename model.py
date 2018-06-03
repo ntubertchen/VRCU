@@ -17,7 +17,7 @@ class Model(nn.Module):
         self.out_dim = out_dim
 
         self.lstm = nn.LSTM(emb_dim, hidden_dim)
-
+        self.image_lstm = nn.LSTM(4032, hidden_dim)
         # weight
         self.gt_W_image_attention = nn.Linear(feature_dim + hidden_dim, hidden_dim)
         self.gt_W_prime_image_attention = nn.Linear(feature_dim + hidden_dim, hidden_dim)
@@ -25,6 +25,8 @@ class Model(nn.Module):
         self.gt_W_prime_question = nn.Linear(hidden_dim, hidden_dim)
         self.gt_W_image = nn.Linear(feature_dim, hidden_dim)
         self.gt_W_prime_image = nn.Linear(feature_dim, hidden_dim)
+        self.gt_W_image_lstm = nn.Linear(hidden_dim, hidden_dim)
+        self.gt_W_prime_image_lstm = nn.Linear(hidden_dim, hidden_dim)
         self.gt_W_clf = nn.Linear(hidden_dim+94, hidden_dim+94)
         self.gt_W_prime_clf = nn.Linear(hidden_dim+94, hidden_dim+94)
 
@@ -36,6 +38,51 @@ class Model(nn.Module):
         # assign pretrained embedding
         self.word_embedding.weight.data.copy_(torch.from_numpy(pretrained_embedding))
     
+    def lstm_image(self, question, image_feature, target):
+        """
+        question (batch, 20)
+        image_feature (batch, 50, 4036)
+        target (batch, 94)
+        """
+
+        #get question hidden state
+        embedd_question = self.word_embedding(question)
+        lstm_out, (h,c) = self.lstm(embedd_question.permute(1, 0, 2))
+        # lstm_hiddenstate = torch.cat((h,c),-1)
+        lstm_hiddenstate = h
+        language_prior = lstm_hiddenstate[-1]
+        image_feature = F.normalize(image_feature, -1) # (batch, 50, 4032)
+
+        _, (i_h, i_c) = self.image_lstm(image_feature.permute(1, 0, 2))
+        image_lstm = i_h[-1]
+        activated_image_lstm = self._gated_tanh(image_lstm, self.gt_W_image_lstm, self.gt_W_prime_image_lstm)
+
+        #image attention 
+        language_prior = torch.unsqueeze(language_prior,1) # (batch, 1, hidden)
+        language_prior_reshape = language_prior.repeat(1, 50, 1) # (batch, 50, hidden)
+        language_prior = torch.squeeze(language_prior)
+        # print (image_feature,language_prior_reshape)
+        image_and_word = torch.cat((image_feature, language_prior_reshape), -1)
+        # print (image_and_word)
+        image_and_word = self._gated_tanh(image_and_word, self.gt_W_image_attention, self.gt_W_prime_image_attention)
+
+        alpha = self.image_word_attention(image_and_word)
+        alpha = F.softmax(alpha.squeeze())
+        # print (alpha.squeeze(),alpha.unsqueeze(1), image_feature)
+        attended_image = torch.bmm(alpha.unsqueeze(1), image_feature).squeeze() # (batch, 4032)
+
+        # element wise dot product
+        activated_language_prior = self._gated_tanh(language_prior, self.gt_W_question, self.gt_W_prime_question)
+        activated_image_feature = self._gated_tanh(attended_image, self.gt_W_image, self.gt_W_prime_image)
+        masked_image_feature = torch.mul(activated_language_prior, activated_image_feature)
+
+        masked_image_feature_with_imagelstm = torch.mul(masked_image_feature,activated_image_lstm)
+
+        given_target = torch.cat((masked_image_feature_with_imagelstm,target),-1)
+        prediction = self.clf(self._gated_tanh(given_target, self.gt_W_clf, self.gt_W_prime_clf))
+
+        return prediction
+
     def forward(self, question, image_feature, target):
         """
         question (batch, 20)
@@ -53,7 +100,7 @@ class Model(nn.Module):
 
         #image attention 
         language_prior = torch.unsqueeze(language_prior,1) # (batch, 1, hidden)
-        language_prior_reshape = language_prior.repeat(1, 50, 1) # (batch, 50, hidden)
+        language_prior_reshape = language_prior.repeat(1, 20, 1) # (batch, 50, hidden)
         language_prior = torch.squeeze(language_prior)
         # print (image_feature,language_prior_reshape)
         image_and_word = torch.cat((image_feature, language_prior_reshape), -1)

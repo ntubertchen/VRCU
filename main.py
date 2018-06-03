@@ -106,6 +106,41 @@ def testing(model,args):
     print ('testing acc',float(correct)/float(len(predict)))
     return float(correct)/float(len(predict))
 
+def experiment_testing(model,args):
+    test_feature, test_q, test_a, test_target, test_arxiv, word_embedding, _ = utils.experiment_load_data('/tmp2/test_nas_h5/guesswhat.test.jsonl','/tmp2/test_nas_h5/image_to_idx.json')
+    predict = []
+    batch_size = 256
+    for i in range(int(len(test_q)/batch_size)):
+        question = np.array(test_q[i*batch_size:(i+1)*batch_size])
+        target = np.array(test_target[i*batch_size:(i+1)*batch_size])
+        feature = Variable(torch.from_numpy(test_feature[i*batch_size:(i+1)*batch_size]).float()).cuda()
+        if args.use_image_lstm:
+            output = model.lstm_image(Variable(torch.from_numpy(question)).cuda(),feature,Variable(torch.from_numpy(target).float().cuda()))
+        else:
+            output = model(Variable(torch.from_numpy(question)).cuda(),feature,Variable(torch.from_numpy(target).float().cuda()))
+        output = output.data.cpu().numpy()
+        predict.append(output)
+    predict = np.array(predict).reshape(-1,3)
+    if len(test_q) % batch_size != 0:
+        question = np.array(test_q[int(len(test_q)/batch_size)*batch_size:])
+        target = np.array(test_target[int(len(test_q)/batch_size)*batch_size:])
+        feature = Variable(torch.from_numpy(test_feature[int(len(test_q)/batch_size)*batch_size:]).float()).cuda()
+        if args.use_image_lstm:
+            output = model.lstm_image(Variable(torch.from_numpy(question)).cuda(),feature,Variable(torch.from_numpy(target).float()).cuda())
+        else:
+            output = model(Variable(torch.from_numpy(question)).cuda(),feature,Variable(torch.from_numpy(target).float()).cuda())
+        output = output.data.cpu().numpy()
+        predict = np.concatenate((predict,output),0)
+
+    predict = np.argmax(predict,-1)
+    answer = np.argmax(test_a,-1)
+    correct = 0
+    for i in range(len(predict)):
+        if predict[i] == answer[i]:
+            correct += 1
+    print ('testing acc',float(correct)/float(len(predict)))
+    return float(correct)/float(len(predict))
+
 def load_train_data():
     train_feature = h5py.File('/tmp2/train_nas_h5/train_all.hdf5','r')
     return train_feature['all'][:]
@@ -185,6 +220,69 @@ def train(args):
                 torch.save(model.state_dict(), './test_lstm_model')
     return 1
 
+def experiment_train(args):
+    if args.use_image_lstm:
+        print ('use image lstm')
+
+    torch.manual_seed(1000)
+    train_feature, train_q, train_a, train_target, train_arxiv, word_embedding,_ = utils.experiment_load_data('/tmp2/train_nas_h5/guesswhat.train.new.jsonl','/tmp2/train_nas_h5/image_to_idx.json')
+    
+
+    model = Model(vocab_size=len(word_embedding),
+        emb_dim=300,
+        feature_dim=94,
+        hidden_dim=300,
+        out_dim=3,
+        pretrained_embedding=word_embedding
+        ).cuda()
+    if args.use_pretrain:
+        print ('load from pretrained model')
+        model.load_state_dict(torch.load('./test_lstm_model'))
+    print ('model size',count_parameters(model))
+    loss_function = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    val_acc = 0
+    BATCH_SIZE = 64
+    for epoch in range(args.epochs):
+        model.train()
+        loss_record = []
+        print ('feature_map length:',len(train_feature))
+        print ('question length:',len(train_q))
+        r = torch.from_numpy(np.array([j for j in range(len(train_q))]))
+        torch_dataset = Data.TensorDataset(data_tensor=r,target_tensor=r)
+        loader = Data.DataLoader(dataset=torch_dataset,
+            batch_size=BATCH_SIZE,
+            shuffle=True
+            )
+        for step, (x_index,_) in enumerate(loader):
+            x_index = x_index.numpy()
+            q = Variable(torch.from_numpy(train_q[x_index])).cuda()
+            a = np.argmax(train_a[x_index],axis=-1)
+            a = Variable(torch.from_numpy(a)).cuda()
+            target = Variable(torch.from_numpy(train_target[x_index]).float()).cuda()
+            feature = Variable(torch.from_numpy(train_feature[x_index]).float()).cuda()
+            if args.use_image_lstm:
+                output = model.lstm_image(q,feature,target)
+            else:
+                output = model(q,feature,target)
+            loss = loss_function(output, a)
+            loss_record.append(loss.data[0])
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            if step % 100 == 0 and step > 0:
+                print ('epoch:',epoch,step,sum(loss_record)/len(loss_record))
+                loss_record = []
+        sys.stdout.flush()
+        if True:
+            model.eval()
+            t_acc = experiment_testing(model,args)
+            if t_acc > val_acc:
+                val_acc = t_acc
+                torch.save(model.state_dict(), './test_lstm_model')
+    return 1
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--lr', metavar='', type=float, default=5e-4, help='initial learning rate')
@@ -193,4 +291,4 @@ if __name__ == '__main__':
     parser.add_argument('--use_pretrain', action='store_true')
     parser.add_argument('--useval', action='store_true')
     args, unparsed = parser.parse_known_args()
-    _ = train(args)
+    _ = experiment_train(args)
