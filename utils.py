@@ -31,7 +31,7 @@ def clean_str(string):
 
 def one_hot_object(target_object_id,object_list,image):
     no_object = True
-    obj_np = np.zeros(94)
+    obj_np = np.zeros(98)
     i_w = image['width']
     i_h = image['height']
     for obj in object_list:
@@ -41,17 +41,21 @@ def one_hot_object(target_object_id,object_list,image):
             assert obj['category_id'] < 90
             assert obj['category_id'] >= 0
             obj_np[obj['category_id']] = 1
-            obj_np[90] = obj['bbox'][0]/float(i_w)#x
-            obj_np[91] = obj['bbox'][1]/float(i_h)#y
-            obj_np[92] = obj['bbox'][2]/float(i_w)#w
-            obj_np[93] = obj['bbox'][3]/float(i_h)#h
+            obj_np[90] = (obj['bbox'][0]-(float(obj['bbox'][2])/2))/float(i_w)#x min
+            obj_np[91] = (obj['bbox'][1]-(float(obj['bbox'][3])/2))/float(i_h)#y min
+            obj_np[92] = (obj['bbox'][0]+(float(obj['bbox'][2])/2))/float(i_w)#x max
+            obj_np[93] = (obj['bbox'][1]+(float(obj['bbox'][3])/2))/float(i_h)#y max
+            obj_np[94] = obj['bbox'][0]/float(i_w) #x center
+            obj_np[95] = obj['bbox'][1]/float(i_h) #y center
+            obj_np[96] = obj['bbox'][2]/float(i_w)#
+            obj_np[97] = obj['bbox'][3]/float(i_h)#h
     assert no_object == False
     return obj_np
 
 def ground_truth_feature(target_object_id,object_list,image):
     no_object = True
-    gt = np.zeros((20,94))
-    target_object_np = np.zeros(94)
+    gt = np.zeros((20,98))
+    target_object_np = np.zeros(98)
     i_w = image['width']
     i_h = image['height']
     count = 0
@@ -61,21 +65,29 @@ def ground_truth_feature(target_object_id,object_list,image):
         assert obj['category_id'] < 90
         assert obj['category_id'] >= 0
         gt[count][obj['category_id']] = 1
-        gt[count][90] = obj['bbox'][0]/float(i_w)#x
-        gt[count][91] = obj['bbox'][1]/float(i_h)#y
-        gt[count][92] = obj['bbox'][2]/float(i_w)#w
-        gt[count][93] = obj['bbox'][3]/float(i_h)#h        
+        gt[count][90] = (obj['bbox'][0]-(float(obj['bbox'][2])/2))/float(i_w)#x min
+        gt[count][91] = (obj['bbox'][1]-(float(obj['bbox'][3])/2))/float(i_h)#y min
+        gt[count][92] = (obj['bbox'][0]+(float(obj['bbox'][2])/2))/float(i_w)#x max
+        gt[count][93] = (obj['bbox'][1]+(float(obj['bbox'][3])/2))/float(i_h)#y max
+        gt[count][94] = obj['bbox'][0]/float(i_w) #x center
+        gt[count][95] = obj['bbox'][1]/float(i_h) #y center
+        gt[count][96] = obj['bbox'][2]/float(i_w)#
+        gt[count][97] = obj['bbox'][3]/float(i_h)#h     
         if obj['id'] == target_object_id:
             target_object_np[obj['category_id']] = 1
-            target_object_np[90] = obj['bbox'][0]/float(i_w)#x
-            target_object_np[91] = obj['bbox'][1]/float(i_h)#y
-            target_object_np[92] = obj['bbox'][2]/float(i_w)#w
-            target_object_np[93] = obj['bbox'][3]/float(i_h)#h
+            target_object_np[90] = (obj['bbox'][0]-(float(obj['bbox'][2])/2))/float(i_w)#x min
+            target_object_np[91] = (obj['bbox'][1]-(float(obj['bbox'][3])/2))/float(i_h)#y min
+            target_object_np[92] = (obj['bbox'][0]+(float(obj['bbox'][2])/2))/float(i_w)#x max
+            target_object_np[93] = (obj['bbox'][1]+(float(obj['bbox'][3])/2))/float(i_h)#y max
+            target_object_np[94] = obj['bbox'][0]/float(i_w) #x center
+            target_object_np[95] = obj['bbox'][1]/float(i_h) #y center
+            target_object_np[96] = obj['bbox'][2]/float(i_w)#
+            target_object_np[97] = obj['bbox'][3]/float(i_h)#h
         count += 1
     assert no_object == False
     return target_object_np, gt, count
 
-def experiment_load_data(file_name,jsonfile):
+def experiment_load_data(file_name,jsonfile,args):
     vocabulary, vocabulary_inv = build_vocab()
     f = open(jsonfile,'r')
     for l in f:
@@ -94,6 +106,9 @@ def experiment_load_data(file_name,jsonfile):
     for line in file_list:
         count += 1
         data_info = json.loads(line)
+        # if 'train' in file_name and args.use_simple:
+        #     if data_info['status'] != 'success':
+        #         continue
         image_name = data_info['image']['file_name']
         if 'train' in image_name:
             feature_map_index = image_to_index['/tmp2/train2014/'+image_name]
@@ -120,6 +135,25 @@ def experiment_load_data(file_name,jsonfile):
     embedding_weights = word2vec_to_index2vec(pretrained_embedding, vocabulary_inv)
 
     return np.array(ground_truth_feature_list), np.array(question), np.array(answer), np.array(target_object_list), arxiv, embedding_weights, obj_in_one_image_list
+
+def print_wa(file_name,wa):
+    file_list = open(file_name,'r')
+    question = []
+    answer = []
+    object_list = []
+    target_id_list = []
+    for line in file_list:
+        data_info = json.loads(line)
+        qa_list = data_info['qas'] #dict answer question
+        target_object = data_info['object_id']
+        object_list = data_info['objects']
+        for qa_pair in qa_list:
+            question.append(clean_str(qa_pair['question']).split(' '))
+            answer.append(qa_pair['answer'])
+            object_list.append(object_list)
+            target_id_list.append(target_object)
+    for idx in wa:
+        print (question[idx],answer[idx],target_id_list[idx],object_list[idx])
 
 def load_data(file_name,jsonfile):
     # utils.load_data('/home/alas79923/vqa/faster-rcnn.pytorch/guesswhat.valid.new.jsonl')
