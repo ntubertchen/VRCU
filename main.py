@@ -113,32 +113,34 @@ def testing(model,args):
     print ('testing acc',float(correct)/float(len(predict)))
     return float(correct)/float(len(predict)), wrong_answer
 
-def experiment_testing(model,args,test_feature, test_q, test_a, test_target, test_arxiv):
+def experiment_testing(model,args,test_feature_x,test_feature_y, test_q, test_a, test_target, test_arxiv):
     predict = []
     batch_size = 256
     for i in range(int(len(test_q)/batch_size)):
         question = np.array(test_q[i*batch_size:(i+1)*batch_size])
         target = np.array(test_target[i*batch_size:(i+1)*batch_size])
-        feature = Variable(torch.from_numpy(test_feature[i*batch_size:(i+1)*batch_size]).float()).cuda()
+        feature_x = Variable(torch.from_numpy(test_feature_x[i*batch_size:(i+1)*batch_size]).float()).cuda()
+        feature_y = Variable(torch.from_numpy(test_feature_y[i*batch_size:(i+1)*batch_size]).float()).cuda()
         if args.use_image_lstm:
-            output = model.lstm_image(Variable(torch.from_numpy(question)).cuda(),feature,Variable(torch.from_numpy(target).float().cuda()))
+            output = model.lstm_image(Variable(torch.from_numpy(question)).cuda(),feature_x,feature_y,Variable(torch.from_numpy(target).float().cuda()))
         elif args.use_simple:
-            output = model.simple(Variable(torch.from_numpy(question)).cuda(),feature,Variable(torch.from_numpy(target).float().cuda()))
+            output = model.simple(Variable(torch.from_numpy(question)).cuda(),feature_x,Variable(torch.from_numpy(target).float().cuda()))
         else:
-            output = model(Variable(torch.from_numpy(question)).cuda(),feature,Variable(torch.from_numpy(target).float().cuda()))
+            output = model(Variable(torch.from_numpy(question)).cuda(),feature_x,Variable(torch.from_numpy(target).float().cuda()))
         output = output.data.cpu().numpy()
         predict.append(output)
     predict = np.array(predict).reshape(-1,3)
     if len(test_q) % batch_size != 0:
         question = np.array(test_q[int(len(test_q)/batch_size)*batch_size:])
         target = np.array(test_target[int(len(test_q)/batch_size)*batch_size:])
-        feature = Variable(torch.from_numpy(test_feature[int(len(test_q)/batch_size)*batch_size:]).float()).cuda()
+        feature_x = Variable(torch.from_numpy(test_feature_x[int(len(test_q)/batch_size)*batch_size:]).float()).cuda()
+        feature_y = Variable(torch.from_numpy(test_feature_y[int(len(test_q)/batch_size)*batch_size:]).float()).cuda()
         if args.use_image_lstm:
-            output = model.lstm_image(Variable(torch.from_numpy(question)).cuda(),feature,Variable(torch.from_numpy(target).float().cuda()))
+            output = model.lstm_image(Variable(torch.from_numpy(question)).cuda(),feature_x,feature_y,Variable(torch.from_numpy(target).float().cuda()))
         elif args.use_simple:
-            output = model.simple(Variable(torch.from_numpy(question)).cuda(),feature,Variable(torch.from_numpy(target).float().cuda()))
+            output = model.simple(Variable(torch.from_numpy(question)).cuda(),feature_x,Variable(torch.from_numpy(target).float().cuda()))
         else:
-            output = model(Variable(torch.from_numpy(question)).cuda(),feature,Variable(torch.from_numpy(target).float().cuda()))
+            output = model(Variable(torch.from_numpy(question)).cuda(),feature_x,Variable(torch.from_numpy(target).float().cuda()))
         output = output.data.cpu().numpy()
         predict = np.concatenate((predict,output),0)
 
@@ -261,20 +263,25 @@ def experiment_train(args):
         print ('use image lstm')
 
     torch.manual_seed(1000)
-    train_feature, train_q, train_a, train_target, train_arxiv, word_embedding,_ = utils.experiment_load_data('/tmp2/train_nas_h5/guesswhat.train.new.jsonl','/tmp2/train_nas_h5/image_to_idx.json',args)
-    
+    train_feature_x,train_feature_y, train_q, train_a, train_target, train_arxiv, word_embedding,_ = utils.experiment_load_data('/tmp2/train_nas_h5/guesswhat.train.new.jsonl','/tmp2/train_nas_h5/image_to_idx.json',args)
 
+    
     model = Model(vocab_size=len(word_embedding),
         emb_dim=300,
         feature_dim=98,
         hidden_dim=512,
         out_dim=3,
-        pretrained_embedding=word_embedding
+        pretrained_embedding=word_embedding,
+        args=args
         ).cuda()
-    test_feature, test_q, test_a, test_target, test_arxiv, _, _ = utils.experiment_load_data('/tmp2/test_nas_h5/guesswhat.test.jsonl','/tmp2/test_nas_h5/image_to_idx.json',args)
+    test_feature_x,test_feature_y, test_q, test_a, test_target, test_arxiv, word_embedding, _ = utils.experiment_load_data('/tmp2/test_nas_h5/guesswhat.test.jsonl','/tmp2/test_nas_h5/image_to_idx.json',args)
+    
+    print (model)
+    
     if args.use_pretrain:
         print ('load from pretrained model')
         model.load_state_dict(torch.load('./test_lstm_model'))
+    
     print ('model size',count_parameters(model))
     loss_function = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -283,7 +290,7 @@ def experiment_train(args):
     for epoch in range(args.epochs):
         model.train()
         loss_record = []
-        print ('feature_map length:',len(train_feature))
+        print ('feature_map length:',len(train_feature_x))
         print ('question length:',len(train_q))
         r = torch.from_numpy(np.array([j for j in range(len(train_q))]))
         torch_dataset = Data.TensorDataset(data_tensor=r,target_tensor=r)
@@ -297,13 +304,14 @@ def experiment_train(args):
             a = np.argmax(train_a[x_index],axis=-1)
             a = Variable(torch.from_numpy(a)).cuda()
             target = Variable(torch.from_numpy(train_target[x_index]).float()).cuda()
-            feature = Variable(torch.from_numpy(train_feature[x_index]).float()).cuda()
+            feature_x = Variable(torch.from_numpy(train_feature_x[x_index]).float()).cuda()
+            feature_y = Variable(torch.from_numpy(train_feature_y[x_index]).float()).cuda()
             if args.use_image_lstm:
-                output = model.lstm_image(q,feature,target)
+                output = model.lstm_image(q,feature_x,feature_y,target)
             elif args.use_simple:
-                output = model.simple(q,feature,target)
+                output = model.simple(q,feature_x,target)
             else:
-                output = model(q,feature,target)
+                output = model(q,feature_x,target)
             loss = loss_function(output, a)
             loss_record.append(loss.data[0])
 
@@ -311,7 +319,9 @@ def experiment_train(args):
             loss.backward()
             if args.clip:
                 torch.nn.utils.clip_grad_norm(model.lstm.weight_ih_l0, args.clip)
+                # print ('i',model.lstm.weight_ih_l0.grad.data)
                 torch.nn.utils.clip_grad_norm(model.lstm.weight_hh_l0, args.clip)
+                # print ('h',model.lstm.weight_ih_l0.grad.data)
                 torch.nn.utils.clip_grad_norm(model.lstm.bias_ih_l0, args.clip)
                 torch.nn.utils.clip_grad_norm(model.lstm.bias_hh_l0, args.clip)
                 torch.nn.utils.clip_grad_norm(model.image_lstm.weight_ih_l0, args.clip)
@@ -326,7 +336,7 @@ def experiment_train(args):
         sys.stdout.flush()
         if True:
             model.eval()
-            t_acc, wa = experiment_testing(model,args,test_feature, test_q, test_a, test_target, test_arxiv)
+            t_acc, wa = experiment_testing(model,args,test_feature_x,test_feature_y, test_q, test_a, test_target, test_arxiv)
             if t_acc > val_acc:
                 val_acc = t_acc
                 if args.use_simple:

@@ -84,8 +84,10 @@ def ground_truth_feature(target_object_id,object_list,image):
             target_object_np[96] = obj['bbox'][2]/float(i_w)#
             target_object_np[97] = obj['bbox'][3]/float(i_h)#h
         count += 1
+    gt_x = sorted(gt, key = lambda x:x[94])
+    gt_y = sorted(gt, key = lambda x:x[95])
     assert no_object == False
-    return target_object_np, gt, count
+    return target_object_np, gt_x,gt_y, count
 
 def experiment_load_data(file_name,jsonfile,args):
     vocabulary, vocabulary_inv = build_vocab()
@@ -102,7 +104,8 @@ def experiment_load_data(file_name,jsonfile,args):
     feature_map_index_list = []
     count = 0
     obj_in_one_image_list = []
-    ground_truth_feature_list = []
+    ground_truth_feature_list_x = []
+    ground_truth_feature_list_y = []
     for line in file_list:
         count += 1
         data_info = json.loads(line)
@@ -119,13 +122,14 @@ def experiment_load_data(file_name,jsonfile,args):
         qa_list = data_info['qas'] #dict answer question
         target_object = data_info['object_id']
         object_list = data_info['objects']
-        target_object_np, gt_feature,obj_in_one_image = ground_truth_feature(target_object,object_list,data_info['image']) #target gt count
+        target_object_np, gt_feature_x, gt_feature_y,obj_in_one_image = ground_truth_feature(target_object,object_list,data_info['image']) #target gt count
         obj_in_one_image_list.append(obj_in_one_image)
         for qa_pair in qa_list:
             question.append(clean_str(qa_pair['question']).split(' '))
             answer.append(qa_pair['answer'])
             target_object_list.append(target_object_np)
-            ground_truth_feature_list.append(gt_feature)
+            ground_truth_feature_list_x.append(gt_feature_x)
+            ground_truth_feature_list_y.append(gt_feature_y)
         arxiv[image_name] = {'qa_list':qa_list,'target_object':target_object,'object_list':object_list}
     answer = transform_ans_to_onehot(answer)
     print ('answer transform done, question set:',count)
@@ -134,7 +138,7 @@ def experiment_load_data(file_name,jsonfile,args):
     question = trainsform_word_to_index(question,pretrained_embedding,vocabulary)
     embedding_weights = word2vec_to_index2vec(pretrained_embedding, vocabulary_inv)
 
-    return np.array(ground_truth_feature_list), np.array(question), np.array(answer), np.array(target_object_list), arxiv, embedding_weights, obj_in_one_image_list
+    return np.array(ground_truth_feature_list_x),np.array(ground_truth_feature_list_y), np.array(question), np.array(answer), np.array(target_object_list), arxiv, embedding_weights, obj_in_one_image_list
 
 def print_wa(file_name,wa):
     file_list = open(file_name,'r')
