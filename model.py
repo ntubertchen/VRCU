@@ -5,6 +5,8 @@ from torch.autograd import Variable
 import indrnn
 import numpy as np
 
+from transformer import make_tf
+
 class Model(nn.Module):
     def __init__(self, vocab_size, emb_dim, feature_dim, hidden_dim,
         out_dim, pretrained_embedding, args):
@@ -48,9 +50,9 @@ class Model(nn.Module):
     
     def lstm_image(self, question, image_feature_x, image_feature_y, target):
         """
-        question (batch, 20)
-        image_feature (batch, 50, 4036)
-        gt (batch,20,98)
+        question (batch, 20) -> I think it should be (batch, q_len) ?
+        image_feature (batch, 50, 4036) -> I think it should be (batch, 20, 4036) ?
+        gt (batch,20,98) -> what is this?
         target (batch, 98)
         """
 
@@ -59,8 +61,6 @@ class Model(nn.Module):
         lstm_out, (h,c) = self.lstm(embedd_question.permute(1, 0, 2))
         lstm_hiddenstate = h
         language_prior = lstm_hiddenstate[-1]
-        
-
         
         #x_axis lstm with language prior
         language_prior = torch.unsqueeze(language_prior,1) # (batch, 1, hidden)
