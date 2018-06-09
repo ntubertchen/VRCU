@@ -286,7 +286,7 @@ def experiment_train(args):
     loss_function = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     val_acc = 0
-    BATCH_SIZE = 64
+    BATCH_SIZE = 32
     for epoch in range(args.epochs):
         model.train()
         loss_record = []
@@ -314,7 +314,6 @@ def experiment_train(args):
                 output = model(q,feature_x,target)
             loss = loss_function(output, a)
             loss_record.append(loss.data[0])
-
             optimizer.zero_grad()
             loss.backward()
             if args.clip:
@@ -324,11 +323,14 @@ def experiment_train(args):
                 # print ('h',model.lstm.weight_ih_l0.grad.data)
                 torch.nn.utils.clip_grad_norm(model.lstm.bias_ih_l0, args.clip)
                 torch.nn.utils.clip_grad_norm(model.lstm.bias_hh_l0, args.clip)
-                torch.nn.utils.clip_grad_norm(model.image_lstm.weight_ih_l0, args.clip)
-                torch.nn.utils.clip_grad_norm(model.image_lstm.weight_hh_l0, args.clip)
-                torch.nn.utils.clip_grad_norm(model.image_lstm.bias_ih_l0, args.clip)
-                torch.nn.utils.clip_grad_norm(model.image_lstm.bias_hh_l0, args.clip)
-
+                torch.nn.utils.clip_grad_norm(model.image_lstm_x.weight_ih_l0, args.clip)
+                torch.nn.utils.clip_grad_norm(model.image_lstm_x.weight_hh_l0, args.clip)
+                torch.nn.utils.clip_grad_norm(model.image_lstm_x.bias_ih_l0, args.clip)
+                torch.nn.utils.clip_grad_norm(model.image_lstm_x.bias_hh_l0, args.clip)
+                torch.nn.utils.clip_grad_norm(model.image_lstm_y.weight_ih_l0, args.clip)
+                torch.nn.utils.clip_grad_norm(model.image_lstm_y.weight_hh_l0, args.clip)
+                torch.nn.utils.clip_grad_norm(model.image_lstm_y.bias_ih_l0, args.clip)
+                torch.nn.utils.clip_grad_norm(model.image_lstm_y.bias_hh_l0, args.clip)
             optimizer.step()
             if step % 100 == 0 and step > 0:
                 print ('epoch:',epoch,step,sum(loss_record)/len(loss_record))
@@ -342,7 +344,7 @@ def experiment_train(args):
                 if args.use_simple:
                     torch.save(model.state_dict(), './test_simple_model')
                 elif args.use_image_lstm:
-                    torch.save(model.state_dict(), './test_lstm_model')
+                    torch.save(model.state_dict(), './test_lstm_model2')
     print ('highest acc',val_acc)
     return 1
 
